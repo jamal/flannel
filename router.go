@@ -25,7 +25,10 @@ type Route struct {
 
 // New returns a new instance of Router.
 func New() *Router {
-	router := &Router{mux.NewRouter(), make([]Middleware, 0)}
+	router := &Router{
+		mux.NewRouter(),
+		make([]Middleware, 0),
+	}
 	router.StrictSlash(true)
 	return router
 }
@@ -74,7 +77,7 @@ func (r *Router) handler(handler http.HandlerFunc) http.HandlerFunc {
 			time.Since(start),
 		)
 
-		DeleteContext(req)
+		deleteContext(req)
 	}
 }
 

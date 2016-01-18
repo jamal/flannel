@@ -14,8 +14,7 @@ var (
 )
 
 func logOut(logger *log.Logger, level string, r *http.Request, format string, v ...interface{}) {
-	ctx := Context(r)
-	logger.SetPrefix(fmt.Sprintf("[%6s] %s ", level, ctx.RequestID))
+	logger.SetPrefix(fmt.Sprintf("[%6s] %s ", level, reqID(r)))
 	logger.Output(3, fmt.Sprintf(format, v...))
 }
 

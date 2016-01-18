@@ -2,19 +2,13 @@ package flannel
 
 import (
 	"net/http"
+	"reflect"
 	"sync"
-	"time"
 )
-
-// RequestContext wraps http.Request
-type RequestContext struct {
-	Start     time.Time
-	RequestID string
-}
 
 var (
 	mutex       sync.RWMutex
-	reqContexts = make(map[*http.Request]*RequestContext)
+	reqContexts = make(map[*http.Request]map[reflect.Type]reflect.Value)
 	reqIDs      = make(map[*http.Request]string)
 )
 
@@ -30,25 +24,31 @@ func reqID(r *http.Request) string {
 	return reqIDs[r]
 }
 
+func deleteContext(r *http.Request) {
+	mutex.Lock()
+	delete(reqContexts, r)
+	mutex.Unlock()
+}
+
 // Context returns a context for a http.Request
-func Context(r *http.Request) *RequestContext {
+func Context(r *http.Request, data interface{}) {
+	typ := reflect.TypeOf(data)
+	dv := reflect.Indirect(reflect.ValueOf(data))
+
+	// Read existing context
 	mutex.RLock()
-	if ctx, ok := reqContexts[r]; ok {
+	if sv, ok := reqContexts[r][typ]; ok {
 		mutex.RUnlock()
-		return ctx
+		dv.Set(sv)
+		return
 	}
 	mutex.RUnlock()
 
+	// Write new context
 	mutex.Lock()
-	ctx := &RequestContext{}
-	reqContexts[r] = ctx
-	mutex.Unlock()
-	return ctx
-}
-
-// DeleteContext deletes the request context for a given http.Request
-func DeleteContext(r *http.Request) {
-	mutex.Lock()
-	delete(reqContexts, r)
+	if _, ok := reqContexts[r]; !ok {
+		reqContexts[r] = make(map[reflect.Type]reflect.Value)
+	}
+	reqContexts[r][typ] = dv
 	mutex.Unlock()
 }
