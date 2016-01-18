@@ -1,4 +1,4 @@
-package main
+package flannel
 
 import (
 	"crypto/rand"
@@ -13,54 +13,68 @@ import (
 // Router thing
 type Router struct {
 	*mux.Router
+	middleware []Middleware
+}
+
+// Route defines a single route for the router
+type Route struct {
+	Method  string
+	Path    string
+	Handler http.HandlerFunc
 }
 
 // New returns a new instance of Router.
 func New() *Router {
-	router := &Router{mux.NewRouter()}
+	router := &Router{mux.NewRouter(), make([]Middleware, 0)}
 	router.StrictSlash(true)
 	return router
+}
+
+// Use registers a new Middleware for this router.
+func (r *Router) Use(middleware Middleware) {
+	r.middleware = append(r.middleware, middleware)
 }
 
 // AddRoute registers a route.
 func (r *Router) AddRoute(route Route) {
 	r.Methods(route.Method).
 		Path(route.Path).
-		Handler(route.Handler)
+		Handler(r.handler(route.Handler))
 }
 
 // AddRoutes registers a set of routes with this router.
 func (r *Router) AddRoutes(routes []Route) {
 	for _, route := range routes {
-		// Handlers are executed in FILO order, so reverse middleware
-		// handler := route.Handler
-		// for i := len(middleware) - 1; i >= 0; i-- {
-		// 	handler = middleware[i](handler)
-		// }
 		r.AddRoute(route)
 	}
 }
 
 func (r *Router) handler(handler http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, req *http.Request) {
+		// Prepare handler stack
+		stack := handler
+		for i := len(r.middleware) - 1; i >= 0; i-- {
+			stack = r.middleware[i](stack)
+		}
+
 		// Create new request context
 		start := time.Now()
 		rid := genReqID()
-		setReqID(r, rid)
+		setReqID(req, rid)
 		cw := &responseWriter{w, 200}
 		cw.Header().Set("Request-Id", rid)
 
-		handler(cw, r)
+		stack(cw, req)
 
-		logAccess(r, "%s %s status=%d remote=%s time=%s",
-			r.Method,
-			r.RequestURI,
+		logAccess(req, "%s %s status=%d remote=%s time=%s",
+			req.Method,
+			req.RequestURI,
 			cw.Status,
-			r.RemoteAddr,
+			req.RemoteAddr,
 			time.Since(start),
 		)
 
-		DeleteContext(r)
+		DeleteContext(req)
 	}
 }
 
