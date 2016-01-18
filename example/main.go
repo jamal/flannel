@@ -1,0 +1,11 @@
+package main
+
+import (
+	"log"
+	"net/http"
+)
+
+func main() {
+	r := flannel.New()
+	log.Fatal(http.ListenAndServe(":8080", r))
+}
